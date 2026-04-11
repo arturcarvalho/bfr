@@ -16,7 +16,14 @@ var BuildTime string
 func main() {
 	showComments := flag.Bool("comments", false, "output comments as JSON")
 	deleteComment := flag.String("delete-comment", "", "delete comments by comma-separated IDs")
+	ci := flag.Bool("ci", false, "output review status as JSON")
+	minReviewed := flag.Int("min-reviewed", -1, "exit 1 if reviewed % is below threshold (use with --ci)")
 	flag.Parse()
+
+	if *ci {
+		runCI(*minReviewed)
+		return
+	}
 
 	if *deleteComment != "" {
 		ids := strings.Split(*deleteComment, ",")
@@ -49,6 +56,46 @@ func main() {
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+type ciFileOutput struct {
+	Path    string `json:"path"`
+	Percent int    `json:"percent"`
+}
+
+type ciOutput struct {
+	TotalPercent int            `json:"totalPercent"`
+	Files        []ciFileOutput `json:"files"`
+}
+
+func runCI(minReviewed int) {
+	marks, err := loadMarks()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	var files []ciFileOutput
+	for _, fm := range marks {
+		combined := combinedSegments(fm.Reviewers)
+		pct := reviewedPercent(combined)
+		files = append(files, ciFileOutput{Path: fm.Path, Percent: pct})
+	}
+	if files == nil {
+		files = []ciFileOutput{}
+	}
+
+	out := ciOutput{
+		TotalPercent: overallReviewedPercent(marks),
+		Files:        files,
+	}
+	data, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Println(string(data))
+
+	if minReviewed >= 0 && out.TotalPercent < minReviewed {
+		fmt.Fprintf(os.Stderr, "Review coverage %d%% is below minimum %d%%\n", out.TotalPercent, minReviewed)
 		os.Exit(1)
 	}
 }

@@ -94,6 +94,15 @@ Pressing `i` cycles through three importance levels for the current selection:
 | `█`       | High   | Important code worth extra attention               |
 | `⠸`       | Ignore | Low-value code (boilerplate, generated (😆), etc.) |
 
+## CLI
+
+| Flag                          | Description                                      |
+| ----------------------------- | ------------------------------------------------ |
+| `--comments`                  | Output all comments as JSON                      |
+| `--delete-comment id1,id2`    | Delete comments by comma-separated IDs           |
+| `--ci`                        | Output review coverage as JSON                   |
+| `--ci --min-reviewed 80`      | Same, but exit 1 if below threshold              |
+
 ## Badge
 
 bfr generates a `.bfr/badge.json` file compatible with [shields.io](https://shields.io). _It only works with public repos_. To add a review badge to your README, commit `.bfr/badge.json` and add:
