@@ -97,7 +97,7 @@ func newModel(dirtyPaths []string) (model, error) {
 		}
 	}
 
-	marks, err := initOrUpdateMarks(entries)
+	marks, _, err := initOrUpdateMarks(entries)
 	if err != nil {
 		return model{}, err
 	}
@@ -274,6 +274,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				if m.commentText != "" && m.file.hasBlock() {
 					c := Comment{
+						ID:        generateID(),
 						StartLine: m.file.blockStart + 1,
 						EndLine:   m.file.blockEnd,
 						Text:      m.commentText,

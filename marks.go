@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"fmt"
 	"os/exec"
 	"sort"
 	"strings"
@@ -150,7 +152,14 @@ type Segment struct {
 	State     SegmentState `json:"state"`
 }
 
+func generateID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
+
 type Comment struct {
+	ID        string `json:"id"`
 	StartLine int    `json:"startLine"`
 	EndLine   int    `json:"endLine"`
 	Text      string `json:"text"`

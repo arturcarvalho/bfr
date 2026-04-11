@@ -20,6 +20,7 @@ type filePane struct {
 	rawLines   []string // raw source (no ANSI)
 	blockStart int
 	blockEnd   int
+	anchor     int // line that stays fixed during resize
 	presetIdx  int // index into presetSizes()
 	offset     int
 	filePath   string
@@ -112,6 +113,7 @@ func (p *filePane) initBlock(visibleHeight int) {
 	if p.blockEnd > n {
 		p.blockEnd = n
 	}
+	p.anchor = (p.blockStart + p.blockEnd) / 2
 	p.centerBlock(visibleHeight)
 }
 
@@ -122,6 +124,7 @@ func (p *filePane) moveBlockDown(visibleHeight int) {
 	}
 	p.blockStart++
 	p.blockEnd++
+	p.anchor = (p.blockStart + p.blockEnd) / 2
 	p.centerBlock(visibleHeight)
 }
 
@@ -131,6 +134,7 @@ func (p *filePane) moveBlockUp(visibleHeight int) {
 	}
 	p.blockStart--
 	p.blockEnd--
+	p.anchor = (p.blockStart + p.blockEnd) / 2
 	p.centerBlock(visibleHeight)
 }
 
@@ -172,9 +176,8 @@ func (p *filePane) applyPreset(visibleHeight int) {
 	sizes := presetSizes(n, visibleHeight)
 	size := sizes[p.presetIdx]
 
-	// Keep block centered around its current midpoint
-	mid := (p.blockStart + p.blockEnd) / 2
-	p.blockStart = mid - size/2
+	// Resize around anchor so the anchor line stays fixed on screen
+	p.blockStart = p.anchor - size/2
 	p.blockEnd = p.blockStart + size
 
 	if p.blockStart < 0 {
@@ -188,7 +191,6 @@ func (p *filePane) applyPreset(visibleHeight int) {
 			p.blockStart = 0
 		}
 	}
-	p.centerBlock(visibleHeight)
 }
 
 func (p *filePane) centerBlock(visibleHeight int) {
@@ -234,6 +236,7 @@ func (p *filePane) jumpToNext(segs []Segment, isegs []ImportanceSegment, comment
 			if p.blockEnd > n {
 				p.blockEnd = n
 			}
+			p.anchor = (p.blockStart + p.blockEnd) / 2
 			p.centerBlock(visibleHeight)
 			return
 		}
@@ -257,6 +260,7 @@ func (p *filePane) jumpToPrev(segs []Segment, isegs []ImportanceSegment, comment
 			if p.blockEnd > n {
 				p.blockEnd = n
 			}
+			p.anchor = (p.blockStart + p.blockEnd) / 2
 			p.centerBlock(visibleHeight)
 			return
 		}

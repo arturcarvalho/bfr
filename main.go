@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -13,8 +14,27 @@ import (
 var BuildTime string
 
 func main() {
-	showComments := flag.Bool("comments", false, "output comments and exit")
+	showComments := flag.Bool("comments", false, "output comments as JSON")
+	deleteComment := flag.String("delete-comment", "", "delete comments by comma-separated IDs")
 	flag.Parse()
+
+	if *deleteComment != "" {
+		ids := strings.Split(*deleteComment, ",")
+		marks, err := loadMarks()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		count := deleteCommentsByID(marks, ids)
+		if count > 0 {
+			if err := saveMarks(marks); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
+		fmt.Printf("Deleted %d comment(s).\n", count)
+		return
+	}
 
 	if *showComments {
 		printComments()
@@ -33,29 +53,39 @@ func main() {
 	}
 }
 
+type commentOutput struct {
+	ID        string `json:"id"`
+	File      string `json:"file"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine"`
+	Text      string `json:"text"`
+	Author    string `json:"author"`
+	CreatedAt string `json:"createdAt"`
+}
+
 func printComments() {
 	marks, err := loadMarks()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	found := false
+	var out []commentOutput
 	for _, fm := range marks {
 		for _, c := range fm.Comments {
-			found = true
-			date := c.CreatedAt
-			if i := strings.IndexByte(date, 'T'); i >= 0 {
-				date = date[:i]
-			}
-			if c.StartLine == c.EndLine {
-				fmt.Printf("%s:%d (%s, %s)\n", fm.Path, c.StartLine, c.Author, date)
-			} else {
-				fmt.Printf("%s:%d-%d (%s, %s)\n", fm.Path, c.StartLine, c.EndLine, c.Author, date)
-			}
-			fmt.Printf("  %s\n\n", c.Text)
+			out = append(out, commentOutput{
+				ID:        c.ID,
+				File:      fm.Path,
+				StartLine: c.StartLine,
+				EndLine:   c.EndLine,
+				Text:      c.Text,
+				Author:    c.Author,
+				CreatedAt: c.CreatedAt,
+			})
 		}
 	}
-	if !found {
-		fmt.Println("No comments.")
+	if out == nil {
+		out = []commentOutput{}
 	}
+	data, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Println(string(data))
 }

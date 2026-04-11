@@ -195,15 +195,21 @@ func parseHunkHeader(line string) (Hunk, error) {
 	}, nil
 }
 
-func initOrUpdateMarks(entries []fileEntry) ([]FileMarks, error) {
+func initOrUpdateMarks(entries []fileEntry, headCommit ...string) ([]FileMarks, bool, error) {
 	marks, err := loadMarks()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	headCommit, err := gitHeadCommit()
-	if err != nil {
-		return nil, err
+	var commit string
+	if len(headCommit) > 0 {
+		commit = headCommit[0]
+	} else {
+		var err error
+		commit, err = gitHeadCommit()
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
 	marksByPath := make(map[string]*FileMarks)
@@ -212,6 +218,7 @@ func initOrUpdateMarks(entries []fileEntry) ([]FileMarks, error) {
 	}
 
 	userName := gitUserName()
+	changed := false
 
 	var result []FileMarks
 	for _, entry := range entries {
@@ -225,54 +232,88 @@ func initOrUpdateMarks(entries []fileEntry) ([]FileMarks, error) {
 
 		existing, found := marksByPath[entry.relPath]
 		if !found {
+			changed = true
 			result = append(result, FileMarks{
 				Path:               entry.relPath,
 				FileName:           entry.name,
-				Commit:             headCommit,
+				Commit:             commit,
 				Reviewers:          map[string][]Segment{userName: newFileSegments(lineCount)},
 				ImportanceSegments: newFileImportanceSegments(lineCount),
 			})
-		} else if existing.Commit == headCommit {
+		} else if existing.Commit == commit {
 			for name, segs := range existing.Reviewers {
-				existing.Reviewers[name] = clampSegments(segs, lineCount)
+				clamped := clampSegments(segs, lineCount)
+				if len(clamped) != len(segs) {
+					changed = true
+				}
+				existing.Reviewers[name] = clamped
 			}
-			existing.ImportanceSegments = clampImportanceSegments(existing.ImportanceSegments, lineCount)
+			clamped := clampImportanceSegments(existing.ImportanceSegments, lineCount)
+			if len(clamped) != len(existing.ImportanceSegments) {
+				changed = true
+			}
+			existing.ImportanceSegments = clamped
 			result = append(result, *existing)
 		} else {
-			hunks, err := gitDiffHunks(existing.Commit, headCommit, entry.relPath)
+			hunks, err := gitDiffHunks(existing.Commit, commit, entry.relPath)
 			if err != nil {
+				changed = true
 				result = append(result, FileMarks{
 					Path:               entry.relPath,
 					FileName:           entry.name,
-					Commit:             headCommit,
+					Commit:             commit,
 					Reviewers:          map[string][]Segment{userName: newFileSegments(lineCount)},
 					ImportanceSegments: newFileImportanceSegments(lineCount),
 				})
 				continue
 			}
 
-			reviewers := make(map[string][]Segment)
-			for name, segs := range existing.Reviewers {
-				if len(hunks) > 0 {
+			if len(hunks) == 0 {
+				// File not changed between commits — keep as-is
+				result = append(result, *existing)
+			} else {
+				changed = true
+				reviewers := make(map[string][]Segment)
+				for name, segs := range existing.Reviewers {
 					reviewers[name] = clampSegments(applyHunks(segs, hunks), lineCount)
-				} else {
-					reviewers[name] = clampSegments(segs, lineCount)
 				}
-			}
 
-			result = append(result, FileMarks{
-				Path:               entry.relPath,
-				FileName:           entry.name,
-				Commit:             headCommit,
-				Reviewers:          reviewers,
-				ImportanceSegments: clampImportanceSegments(existing.ImportanceSegments, lineCount),
-			})
+				result = append(result, FileMarks{
+					Path:               entry.relPath,
+					FileName:           entry.name,
+					Commit:             commit,
+					Reviewers:          reviewers,
+					ImportanceSegments: clampImportanceSegments(existing.ImportanceSegments, lineCount),
+				})
+			}
 		}
 	}
 
-	if err := saveMarks(result); err != nil {
-		return nil, err
+	if changed {
+		if err := saveMarks(result); err != nil {
+			return nil, false, err
+		}
 	}
 
-	return result, nil
+	return result, changed, nil
+}
+
+func deleteCommentsByID(marks []FileMarks, ids []string) int {
+	idSet := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	deleted := 0
+	for i := range marks {
+		var kept []Comment
+		for _, c := range marks[i].Comments {
+			if idSet[c.ID] {
+				deleted++
+			} else {
+				kept = append(kept, c)
+			}
+		}
+		marks[i].Comments = kept
+	}
+	return deleted
 }

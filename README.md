@@ -104,6 +104,50 @@ bfr generates a `.bfr/badge.json` file compatible with [shields.io](https://shie
 
 Replace `YOUR_USER` and `YOUR_REPO` with your GitHub username and repository name. The badge updates each time you commit `badge.json` after a review session.
 
+## Claude Code integration
+
+bfr works with [Claude Code](https://claude.ai/claude-code). You can leave comments on code and have Claude resolve them using the `/answer-comments` skill.
+
+### Setup
+
+Create the skill file at `~/.claude/skills/answer-comments/SKILL.md`:
+
+```markdown
+---
+name: answer-comments
+description: Process bfr code review comments — read code, resolve, or clarify
+user-invocable: true
+---
+
+Process code review comments left in bfr.
+
+## Steps
+
+1. Run `bfr --comments` to get the JSON list of comments
+2. For each comment:
+   a. Read the referenced file and line range
+   b. Understand what the comment is asking
+   c. Decide one of:
+      - **Resolve**: If you can fix the issue, make the code change and delete the comment with `bfr --delete-comment <id>`
+      - **Clarify**: If the comment is ambiguous, ask the user what they meant before acting
+      - **Skip**: If the comment is informational (not actionable), leave it alone
+3. After processing all comments, run `bfr --comments` again to show remaining comments
+
+## Rules
+
+- Always read the code before acting — don't guess
+- Show what you changed for each resolved comment
+- Ask before making large refactors
+- Delete comments only after successfully resolving them
+- If no comments exist, say "No comments to process."
+```
+
+### Usage
+
+1. Review code in bfr, press `c` to leave comments on selections
+2. In Claude Code, run `/answer-comments`
+3. Claude reads the comments, fixes what it can, and asks about the rest
+
 ## Warning
 
 - This is very experimental, and although I reviewed a few thousands of lines of code I probably generated more than 10K. The likelihood of slop is high
